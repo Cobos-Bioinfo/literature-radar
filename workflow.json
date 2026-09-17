@@ -1,0 +1,196 @@
+{
+  "name": "Literature Radar",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 8,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "1d162144-dc90-4149-adfe-8c00cdf85e49",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "db",
+              "value": "pubmed"
+            },
+            {
+              "name": "retmode",
+              "value": "json"
+            },
+            {
+              "name": "datetype",
+              "value": "pdat"
+            },
+            {
+              "name": "reldate",
+              "value": "7"
+            },
+            {
+              "name": "retmax",
+              "value": "25"
+            },
+            {
+              "name": "term",
+              "value": "crispr AND (single cell OR scRNA-seq)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "53476615-509e-42c3-a818-578be3ec1ee4",
+      "name": "PubMed esearch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "db",
+              "value": "pubmed"
+            },
+            {
+              "name": "retmode",
+              "value": "xml"
+            },
+            {
+              "name": "rettype",
+              "value": "abstract"
+            },
+            {
+              "name": "id",
+              "value": "={{ $json.esearchresult.idlist.join(\",\") }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "a25aa743-b545-4712-9589-b86921e86310",
+      "name": "PubMed efetch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Literature Radar - n8n Code node\n// Mode: \"Run Once for All Items\"  |  Language: JavaScript\n//\n// INPUT:  the XML string returned by the efetch HTTP Request node\n// OUTPUT: one item -> { subject, html, count }\n//         wire { subject } and { html } into the email node.\n\n// 1. Grab the raw XML from the incoming item (tolerant about the field name,\n//    so an empty-result day that returns no/garbled body just yields 0 papers)\nconst item = $input.first().json;\nconst xml =\n  (typeof item === 'string' ? item : '') ||\n  item.data ||\n  item.body ||\n  '';\n\n// Small helper: strip inner tags (<i>, <sup>, ...) and decode HTML entities\nconst decode = (s = '') =>\n  s\n    .replace(/<[^>]+>/g, '')\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))\n    .replace(/&#(\\d+);/g, (_, d) => String.fromCodePoint(+d))\n    .replace(/&amp;/g, '&')\n    .replace(/\\s+/g, ' ')\n    .trim();\n\nconst first = (block, re) => {\n  const m = block.match(re);\n  return m ? decode(m[1]) : '';\n};\n\n// 2. Split into individual <PubmedArticle> blocks and pull the fields we want\nconst blocks = xml.split('<PubmedArticle>').slice(1);\n\nconst papers = blocks\n  .map((block) => {\n    const pmid = (block.match(/<PMID[^>]*>(\\d+)<\\/PMID>/) || [])[1] || '';\n    const title = first(block, /<ArticleTitle>([\\s\\S]*?)<\\/ArticleTitle>/) || 'Untitled';\n    const journal = first(block, /<Title>([\\s\\S]*?)<\\/Title>/);\n    const year = first(block, /<PubDate>[\\s\\S]*?<Year>(\\d{4})<\\/Year>/);\n\n    // Abstract -> brief summary: join sections, keep first ~2 sentences, cap length\n    const parts = [...block.matchAll(/<AbstractText[^>]*>([\\s\\S]*?)<\\/AbstractText>/g)]\n      .map((m) => decode(m[1]));\n    let summary = parts.join(' ');\n    summary = (summary.match(/[^.!?]+[.!?]+/g) || [summary]).slice(0, 2).join(' ').trim();\n    if (summary.length > 400) summary = summary.slice(0, 397) + '…';\n    if (!summary) summary = 'No abstract available.';\n\n    // Authors: first 3 + \"et al.\"\n    const authors = [...block.matchAll(\n      /<Author[^>]*>[\\s\\S]*?<LastName>([\\s\\S]*?)<\\/LastName>[\\s\\S]*?(?:<Initials>([\\s\\S]*?)<\\/Initials>)?[\\s\\S]*?<\\/Author>/g\n    )].map((m) => `${decode(m[1])}${m[2] ? ' ' + decode(m[2]) : ''}`);\n    const authorLine = authors.length\n      ? authors.slice(0, 3).join(', ') + (authors.length > 3 ? ', et al.' : '')\n      : '';\n\n    return {\n      pmid,\n      title,\n      journal,\n      year,\n      summary,\n      authorLine,\n      url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,\n    };\n  })\n  .filter((p) => p.pmid);\n\n// 3. Render the HTML email (inline styles = maximum email-client compatibility)\nconst today = new Date().toLocaleDateString('en-GB', {\n  day: 'numeric', month: 'long', year: 'numeric',\n});\n\nconst cards = papers.map((p) => `\n  <tr><td style=\"padding:0 0 20px;\">\n    <div style=\"border:1px solid #e5e7eb;border-radius:10px;padding:16px 18px;background:#ffffff;\">\n      <a href=\"${p.url}\" style=\"color:#1a56db;font-size:16px;font-weight:600;text-decoration:none;line-height:1.4;\">${p.title}</a>\n      <div style=\"color:#6b7280;font-size:12px;margin:6px 0 10px;\">\n        ${[p.authorLine, p.journal, p.year].filter(Boolean).join(' &middot; ')}\n      </div>\n      <div style=\"color:#374151;font-size:14px;line-height:1.55;\">${p.summary}</div>\n      <a href=\"${p.url}\" style=\"display:inline-block;margin-top:12px;color:#1a56db;font-size:13px;font-weight:600;text-decoration:none;\">Read on PubMed &rarr;</a>\n    </div>\n  </td></tr>`).join('');\n\nconst html = papers.length === 0\n  ? `<p style=\"font-family:sans-serif;color:#374151;\">No new papers matched your query in this window.</p>`\n  : `<!doctype html><html><body style=\"margin:0;background:#f3f4f6;\">\n  <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f3f4f6;padding:24px 0;\">\n    <tr><td align=\"center\">\n      <table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;width:100%;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;\">\n        <tr><td style=\"padding:0 0 20px;\">\n          <div style=\"font-size:20px;font-weight:700;color:#111827;\">Literature Radar</div>\n          <div style=\"font-size:13px;color:#6b7280;margin-top:4px;\">${today} &middot; ${papers.length} new paper${papers.length === 1 ? '' : 's'}</div>\n        </td></tr>\n        ${cards}\n        <tr><td style=\"padding:8px 0 0;color:#9ca3af;font-size:11px;\">Sent by your n8n Literature Radar &middot; source: PubMed</td></tr>\n      </table>\n    </td></tr>\n  </table></body></html>`;\n\nreturn [{\n  json: {\n    subject: `Literature Radar - ${papers.length} new paper${papers.length === 1 ? '' : 's'} (${today})`,\n    html,\n    count: papers.length,\n  },\n}];\n"
+      },
+      "id": "ca506d68-99f7-491a-aa68-9cf734e13b80",
+      "name": "Build digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "",
+        "toEmail": "",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "html",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "4afb5f0f-d034-4b7a-9a8a-1e5c9993e5ed",
+      "name": "Send email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        880,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "PubMed esearch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PubMed esearch": {
+      "main": [
+        [
+          {
+            "node": "PubMed efetch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PubMed efetch": {
+      "main": [
+        [
+          {
+            "node": "Build digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build digest": {
+      "main": [
+        [
+          {
+            "node": "Send email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
