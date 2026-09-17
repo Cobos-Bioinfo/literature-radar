@@ -6,11 +6,13 @@ from NCBI, formats them into a readable email, and sends it. No dashboards to ch
 the papers just show up in my inbox.
 
 I built it to stay on top of single-cell and CRISPR literature without opening PubMed
-every morning, and to have a clean end-to-end n8n project to point people at.
+every morning, which are topics that have always interested me but haven't had the chance to work closely with.  
+Additionally it functions as a clean end-to-end n8n project to point people at.
 
 ![Sample of the daily digest email](docs/img/email-preview.png)
 
-*The email the workflow sends. Papers shown here are sample data.*
+**The email body sent by the workflow.**  
+*Papers shown here are sample data.*
 
 ## What it does
 
@@ -45,27 +47,7 @@ The parser lives in [`literature-radar-code-node.js`](literature-radar-code-node
 so it is easy to read without importing anything. The whole workflow is in
 [`workflow.json`](workflow.json).
 
-<!-- Optional: add a screenshot of the workflow open in n8n.
-     Save it as docs/img/canvas.png, then uncomment the next line.
 ![The workflow open on the n8n canvas](docs/img/canvas.png)
--->
-
-## The parts that took some figuring out
-
-These are the details that are not obvious from the happy path, and the reason the
-workflow does not fall over:
-
-- **Empty days break efetch.** On a day with zero matches the ID list is empty and
-  efetch errors out. The efetch node has *On Error: Continue* set, so the run keeps
-  going and the Code node produces a clean "no new papers" email instead of failing.
-- **The Code node needs a string, not a parsed object.** efetch returns XML, so its
-  Response Format is set to *Text*. Without that, the raw XML never reaches the parser
-  in a form it can read.
-- **The date window has to match the schedule.** `reldate` in the esearch call is the
-  lookback in days. A daily trigger uses `reldate=1`, a weekly one uses `reldate=7`.
-  Mismatch it and you either miss papers or get duplicates.
-- **Abstracts are long.** The parser keeps the first two sentences, caps the length,
-  and lists the first three authors followed by "et al." so the email stays skimmable.
 
 ## Run it yourself
 
@@ -109,9 +91,11 @@ docker compose down          # stop it, workflow and credentials are kept
 ## A note on "always running"
 
 This is self-hosted on purpose. n8n Cloud is paid after its trial, and running it
-locally with Docker is free. The one honest caveat: a workflow only fires while the
+locally with Docker is free.  
+Therefore, a workflow only fires while the
 host machine is awake, and n8n does not back-fill runs it missed while off. On a laptop
-that means "runs whenever the machine is on around 08:00." For true 24/7 you would put
+that means "runs whenever the machine is on at 08:00."  
+For a true 24/7 you would put
 the same Docker setup on an always-on box, such as a small VM or a Raspberry Pi.
 
 ## Repo layout
