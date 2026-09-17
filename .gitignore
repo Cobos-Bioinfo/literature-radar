@@ -17,6 +17,9 @@ node_modules/
 .DS_Store
 Thumbs.db
 *:Zone.Identifier
+*.tmp
+*.TMP
+*~RF*.TMP
 
 # Editors
 .vscode/
