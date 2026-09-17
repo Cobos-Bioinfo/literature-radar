@@ -1,6 +1,7 @@
 services:
   n8n:
-    image: docker.n8n.io/n8nio/n8n
+    # Pinned for reproducibility. Bump intentionally after testing an upgrade.
+    image: docker.n8n.io/n8nio/n8n:2.39.7
     restart: unless-stopped
     ports:
       - "5678:5678"
