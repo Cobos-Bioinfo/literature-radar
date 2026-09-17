@@ -1,5 +1,11 @@
 # Literature Radar
 
+[![n8n](https://img.shields.io/badge/n8n-workflow-EA4B71?logo=n8n&logoColor=white)](https://n8n.io)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com)
+[![JavaScript](https://img.shields.io/badge/JavaScript-Code%20node-F7DF1E?logo=javascript&logoColor=black)](literature-radar-code-node.js)
+[![PubMed E-utilities](https://img.shields.io/badge/Data-PubMed%20E--utilities-326599)](https://www.ncbi.nlm.nih.gov/books/NBK25501/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-3DA639)](LICENSE)
+
 A small [n8n](https://n8n.io) workflow that emails me a daily digest of new PubMed
 papers matching a search I care about. It runs on a schedule, pulls fresh results
 from NCBI, formats them into a readable email, and sends it. No dashboards to check,
