@@ -1,0 +1,23 @@
+# n8n local data (created if you ever run n8n outside Docker)
+.n8n/
+n8n-data/
+
+# Secrets. Never commit these.
+.env
+.env.*
+*.env
+credentials.json
+*credentials*.json
+*.secret
+
+# Node
+node_modules/
+
+# OS / WSL junk
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+
+# Editors
+.vscode/
+.idea/

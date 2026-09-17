@@ -1,0 +1,19 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      # Set these to your local timezone so the 8am trigger fires at 8am *your* time.
+      # Change Europe/Madrid if you are elsewhere (e.g. Europe/London, America/New_York).
+      - GENERIC_TIMEZONE=Europe/Madrid
+      - TZ=Europe/Madrid
+      # Allow the editor over plain http on localhost (no cookie warning).
+      - N8N_SECURE_COOKIE=false
+    volumes:
+      # Named volume keeps your workflows and credentials across restarts/reboots.
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:
